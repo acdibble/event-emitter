@@ -27,7 +27,8 @@
       ".ts"
     ],
     "exclude": [
-      "src/**/*.d.ts"
+      "src/**/*.d.ts",
+      "src/globalThis.ts"
     ],
     "include": [
       "src/**/*.ts"

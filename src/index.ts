@@ -1,11 +1,12 @@
-interface Listener extends Function {
+/* eslint-disable max-classes-per-file */
+
+interface Listener {
   listener: Function;
   _events: (Function | Listener)[];
 }
 
-class Listener extends Function {
+class Listener {
   constructor(fn: Function) {
-    super();
     this.listener = fn;
   }
 
@@ -18,9 +19,9 @@ class Listener extends Function {
   }
 }
 
-interface EventEmitter {
-  off: typeof EventEmitter.prototype.removeListener;
-  addListener: typeof EventEmitter.prototype.on;
+interface Events {
+  // @ts-ignore
+  [eventName: any]: (Function | Listener)[];
 }
 
 class EventEmitter {
@@ -28,89 +29,110 @@ class EventEmitter {
 
   private _maxListeners: number | undefined;
 
-  private _events: Map<string | Symbol, { listeners: (Function | Listener)[], maxListeners?: number }>
+  private _eventsCount: number;
+
+  private _events: Events;
 
   constructor() {
-    this._events = new Map();
+    this._events = {};
+    this._eventsCount = 0;
   }
 
-  emit(eventName: string | Symbol, ...values: any[]): boolean {
-    const events = this._events.get(eventName)?.listeners || [];
+  emit(eventName: any, ...values: any[]): boolean {
+    if (!['string', 'symbol'].includes(typeof eventName)) {
+      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
+    }
 
-    if (!events.length) return false;
+    const listeners = this._events[eventName] ?? [];
 
-    for (let i = 0; i < events.length; i += 1) {
-      const event = events[i];
+    if (!listeners.length) return false;
 
-      if (event instanceof Listener) {
-        events.splice(i, 1);
+    for (let i = 0; i < listeners.length; i += 1) {
+      const listener = listeners[i];
+
+      if (listener instanceof Listener) {
+        this._removeListener(i, eventName, listeners);
         i -= 1;
       }
 
-      const ctx = /^function/.test(event.toString())
-        ? this
-        : globalThis;
-
-      event.call(ctx, ...values);
+      // @ts-ignore
+      listener.call(this, ...values);
     }
 
     return true;
   }
 
-  private _on(eventName: string | Symbol, listener: Function | Listener, prepend: boolean): EventEmitter {
-    if (!(listener instanceof Function || listener instanceof Listener)) {
+  private _on(
+    eventName: any,
+    listener: Function,
+    prepend: boolean,
+    once: boolean,
+  ): EventEmitter {
+    if (!(listener instanceof Function)) {
       throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
     }
 
-    this.emit('newListener', event, listener.listener || listener);
+    this.emit('newListener', eventName, listener);
 
-    if (this._events.has(eventName)) {
-      const event = this._events.get(eventName);
-      const maxListeners = event?.maxListeners ?? EventEmitter.defaultMaxListeners;
-      const totalListeners = event!.listeners.length;
-      if (maxListeners !== 0 && maxListeners !== Infinity && totalListeners > maxListeners) {
-        console.info(`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${totalListeners} test listeners added. Use emitter.setMaxListeners() to increase limit`);
+    const newListener = once ? new Listener(listener) : listener;
+    const listeners = this._events[eventName];
+    if (listeners) {
+      const maxListeners = this._maxListeners ?? EventEmitter.defaultMaxListeners;
+      if (maxListeners !== 0 && maxListeners !== Infinity && this._eventsCount > maxListeners) {
+        console.warn(`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${this._eventsCount} test listeners added. Use emitter.setMaxListeners() to increase limit`);
       }
-      event!.listeners[prepend === true ? 'unshift' : 'push'](listener);
+      listeners![prepend === true ? 'unshift' : 'push'](newListener);
     } else {
-      this._events.set(eventName, { listeners: [listener] });
+      this._events[eventName] = [newListener];
     }
 
+    this._eventsCount += 1;
     return this;
   }
 
-  on(eventName: string | Symbol, listener: Function): EventEmitter {
-    return this._on(eventName, listener, false);
+  on(eventName: any, listener: Function): EventEmitter {
+    return this._on(eventName, listener, false, false);
   }
 
-  removeListener(eventName: string | Symbol, listener: Function): EventEmitter {
-    const listeners = this._events.get(eventName)?.listeners;
-    if (!listeners || !listeners.length) return this;
+  private _removeListener(
+    index: number,
+    eventName: any,
+    listeners: (Function | Listener)[],
+  ): Function | Listener {
+    this._eventsCount -= 1;
+    const [listener] = listeners.splice(index, 1);
+    this.emit('removeListener', eventName, listener);
+    return listener;
+  }
 
-    const index = listeners.lastIndexOf(listener);
+  removeListener(eventName: any, listener: Function): EventEmitter {
+    if (!(listener instanceof Function)) {
+      throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
+    }
+
+    const listeners = this._events[eventName];
+    if (!listeners?.length) return this;
+
+    let index = -1;
+    for (let i = 0; i < listeners.length; i += 1) {
+      if (listeners[i] === listener || (listeners[i] as Listener)?.listener === listener) {
+        index = i;
+        break;
+      }
+    }
+
     if (index === -1) return this;
 
-    listeners.splice(index, 1);
-    this.emit('removeListener', event, listener);
+    this._removeListener(index, eventName, listeners);
     return this;
   }
 
-  removeAllListeners(eventName?: string | Symbol): EventEmitter {
-    if (eventName) {
-      if (!['string', 'symbol'].includes(typeof eventName)) {
-        throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
-      }
-      const event = this._events.get(eventName);
-      if (event && event.listeners) {
-        event.listeners = [];
-      }
+  removeAllListeners(eventName?: any): EventEmitter {
+    if (eventName !== undefined) {
+      delete this._events[eventName];
     } else {
-      const allEvents = this._events.values();
-      let event = allEvents.next();
-      while (!event.done) {
-        event.value.listeners = [];
-        event = allEvents.next();
-      }
+      // eslint-disable-next-line no-restricted-syntax
+      this._events = {};
     }
 
     return this;
@@ -121,55 +143,72 @@ class EventEmitter {
   }
 
   setMaxListeners(n: number): EventEmitter {
-    const newMax = Number(n);
-
-    if (newMax < 0 || Number.isNaN(newMax)) {
+    if (typeof n !== 'number' || Number.isNaN(n)) {
       throw new RangeError(`The value of "n" is out of range. It must be a non-negative number. Received ${n}`);
     }
 
-    this._maxListeners = newMax;
+    this._maxListeners = n;
 
     return this;
   }
 
-  listenerCount(eventName: string | Symbol): number {
-    return this._events.get(eventName)?.listeners.length ?? 0;
+  listenerCount(eventName: any): number {
+    if (!['string', 'symbol'].includes(typeof eventName)) {
+      return 0;
+    }
+
+    return this._events[eventName]?.length ?? 0;
   }
 
-  listeners(eventName: string | Symbol): Function[] {
-    if (!eventName || !['string', 'symbol'].includes(typeof eventName)) return [];
+  listeners(eventName: any): Function[] {
+    if (!['string', 'symbol'].includes(typeof eventName)) {
+      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
+    }
 
-    return (this._events.get(eventName)?.listeners ?? [])
+    return (this._events[eventName] ?? [])
       .map((listener) => (listener as Listener).listener ?? listener);
   }
 
-  eventNames(): (string | Symbol)[] {
+  eventNames(): any[] {
     return [...this._events.keys()];
   }
 
-  once(eventName: string | Symbol, listener: Function): EventEmitter {
+  once(eventName: any, listener: Function): EventEmitter {
     if (!(listener instanceof Function)) {
       throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
     }
 
-    return this._on(eventName, new Listener(listener), false);
+    return this._on(eventName, listener, false, true);
   }
 
-  prependOnceListener(eventName: string | Symbol, listener: Function): EventEmitter {
+  prependOnceListener(eventName: any, listener: Function): EventEmitter {
     if (!(listener instanceof Function)) {
       throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
     }
 
-    return this._on(eventName, new Listener(listener), true);
+    return this._on(eventName, listener, true, true);
   }
 
-  prependListener(eventName: string | Symbol, listener: Function): EventEmitter {
-    return this._on(eventName, new Listener(listener), true);
+  prependListener(eventName: any, listener: Function): EventEmitter {
+    if (!['string', 'symbol'].includes(typeof eventName)) {
+      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
+    }
+
+    return this._on(eventName, listener, true, false);
   }
 
-  rawListeners(eventName: string | Symbol): (Function | Listener)[] {
-    return [...this._events.get(eventName)?.listeners ?? []];
+  rawListeners(eventName: any): (Function | Listener)[] {
+    if (!['string', 'symbol'].includes(typeof eventName)) {
+      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
+    }
+
+    return [...this._events[eventName] ?? []];
   }
+}
+
+interface EventEmitter {
+  off: typeof EventEmitter.prototype.removeListener;
+  addListener: typeof EventEmitter.prototype.on;
 }
 
 EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
