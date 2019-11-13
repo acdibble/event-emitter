@@ -4,22 +4,28 @@ interface Events {
   [eventName: string]: (Function | Listener)[];
 }
 
+const on = Symbol('on');
+const removeListener = Symbol('removeListener');
+const events = Symbol('events');
+const eventsCount = Symbol('eventsCount');
+const maxListeners = Symbol('maxListeners');
+
 export class EventEmitter {
   static defaultMaxListeners = 10;
 
-  private _maxListeners: number | undefined;
+  private [maxListeners]: number | undefined;
 
-  private _eventsCount: number;
+  private [eventsCount]: number;
 
-  private _events: Events;
+  private [events]: Events;
 
   constructor() {
-    this._events = {};
-    this._eventsCount = 0;
+    this[events] = {};
+    this[eventsCount] = 0;
   }
 
   emit(eventName: any, ...values: any[]): boolean {
-    const listeners = this._events[eventName] ?? [];
+    const listeners = this[events][eventName] ?? [];
 
     if (!listeners.length) return false;
 
@@ -27,7 +33,7 @@ export class EventEmitter {
       const listener = listeners[i];
 
       if (listener instanceof Listener) {
-        this._removeListener(i, eventName, listeners);
+        this[removeListener](i, eventName, listeners);
         i -= 1;
       }
 
@@ -38,7 +44,7 @@ export class EventEmitter {
     return true;
   }
 
-  private _on(
+  private [on](
     eventName: any,
     listener: Function,
     prepend: boolean,
@@ -51,31 +57,31 @@ export class EventEmitter {
     this.emit('newListener', eventName, listener);
 
     const newListener = once ? new Listener(listener) : listener;
-    const listeners = this._events[eventName];
+    const listeners = this[events][eventName];
     if (listeners) {
-      const maxListeners = this._maxListeners ?? EventEmitter.defaultMaxListeners;
-      if (maxListeners !== 0 && maxListeners !== Infinity && this._eventsCount + 1 > maxListeners) {
-        console.warn(`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${this._eventsCount} ${eventName} listeners added. Use emitter.setMaxListeners() to increase limit`);
+      const max = this[maxListeners] ?? EventEmitter.defaultMaxListeners;
+      if (max !== 0 && max !== Infinity && this[eventsCount] + 1 > max) {
+        console.warn(`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${this[eventsCount]} ${eventName} listeners added. Use emitter.setMaxListeners() to increase limit`);
       }
       listeners![prepend === true ? 'unshift' : 'push'](newListener);
     } else {
-      this._events[eventName] = [newListener];
+      this[events][eventName] = [newListener];
     }
 
-    this._eventsCount += 1;
+    this[eventsCount] += 1;
     return this;
   }
 
   on(eventName: any, listener: Function): EventEmitter {
-    return this._on(eventName, listener, false, false);
+    return this[on](eventName, listener, false, false);
   }
 
-  private _removeListener(
+  private [removeListener](
     index: number,
     eventName: any,
     listeners: (Function | Listener)[],
   ): Function | Listener {
-    this._eventsCount -= 1;
+    this[eventsCount] -= 1;
     const [listener] = listeners.splice(index, 1);
     this.emit('removeListener', eventName, listener);
     return listener;
@@ -86,7 +92,7 @@ export class EventEmitter {
       throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
     }
 
-    const listeners = this._events[eventName];
+    const listeners = this[events][eventName];
     if (!listeners?.length) return this;
 
     let index = -1;
@@ -99,23 +105,23 @@ export class EventEmitter {
 
     if (index === -1) return this;
 
-    this._removeListener(index, eventName, listeners);
+    this[removeListener](index, eventName, listeners);
     return this;
   }
 
   removeAllListeners(eventName?: any): EventEmitter {
     if (eventName !== undefined) {
-      delete this._events[eventName];
+      delete this[events][eventName];
     } else {
       // eslint-disable-next-line no-restricted-syntax
-      this._events = {};
+      this[events] = {};
     }
 
     return this;
   }
 
   getMaxListeners(): number {
-    return this._maxListeners ?? EventEmitter.defaultMaxListeners;
+    return this[maxListeners] ?? EventEmitter.defaultMaxListeners;
   }
 
   setMaxListeners(n: number): EventEmitter {
@@ -123,22 +129,22 @@ export class EventEmitter {
       throw new RangeError(`The value of "n" is out of range. It must be a non-negative number. Received ${n}`);
     }
 
-    this._maxListeners = n;
+    this[maxListeners] = n;
 
     return this;
   }
 
   listenerCount(eventName: any): number {
-    return this._events[eventName]?.length ?? 0;
+    return this[events][eventName]?.length ?? 0;
   }
 
   listeners(eventName: any): Function[] {
-    return (this._events[eventName] ?? [])
+    return (this[events][eventName] ?? [])
       .map((listener) => (listener as Listener).listener ?? listener);
   }
 
   eventNames(): any[] {
-    return Object.keys(this._events);
+    return Object.keys(this[events]);
   }
 
   once(eventName: any, listener: Function): EventEmitter {
@@ -146,7 +152,7 @@ export class EventEmitter {
       throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
     }
 
-    return this._on(eventName, listener, false, true);
+    return this[on](eventName, listener, false, true);
   }
 
   prependOnceListener(eventName: any, listener: Function): EventEmitter {
@@ -154,15 +160,15 @@ export class EventEmitter {
       throw new TypeError(`The "listener" argument must be of type Function. Received type ${typeof listener}`);
     }
 
-    return this._on(eventName, listener, true, true);
+    return this[on](eventName, listener, true, true);
   }
 
   prependListener(eventName: any, listener: Function): EventEmitter {
-    return this._on(eventName, listener, true, false);
+    return this[on](eventName, listener, true, false);
   }
 
   rawListeners(eventName: any): (Function | Listener)[] {
-    return [...this._events[eventName] ?? []];
+    return [...this[events][eventName] ?? []];
   }
 }
 
