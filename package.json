@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "compile": "rm -rf dist && tsc",
     "test": "nyc --reporter=text mocha"
   },
   "author": "",
