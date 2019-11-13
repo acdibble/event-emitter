@@ -1,27 +1,7 @@
-/* eslint-disable max-classes-per-file */
-
-interface Listener {
-  listener: Function;
-  _events: (Function | Listener)[];
-}
-
-class Listener {
-  constructor(fn: Function) {
-    this.listener = fn;
-  }
-
-  call(ctx: any, ...args: any[]) {
-    return this.listener.call(ctx, ...args);
-  }
-
-  toString() {
-    return this.listener.toString();
-  }
-}
+import Listener from './Listener';
 
 interface Events {
-  // @ts-ignore
-  [eventName: any]: (Function | Listener)[];
+  [eventName: string]: (Function | Listener)[];
 }
 
 class EventEmitter {
@@ -39,10 +19,6 @@ class EventEmitter {
   }
 
   emit(eventName: any, ...values: any[]): boolean {
-    if (!['string', 'symbol'].includes(typeof eventName)) {
-      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
-    }
-
     const listeners = this._events[eventName] ?? [];
 
     if (!listeners.length) return false;
@@ -78,8 +54,8 @@ class EventEmitter {
     const listeners = this._events[eventName];
     if (listeners) {
       const maxListeners = this._maxListeners ?? EventEmitter.defaultMaxListeners;
-      if (maxListeners !== 0 && maxListeners !== Infinity && this._eventsCount > maxListeners) {
-        console.warn(`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${this._eventsCount} test listeners added. Use emitter.setMaxListeners() to increase limit`);
+      if (maxListeners !== 0 && maxListeners !== Infinity && this._eventsCount + 1 > maxListeners) {
+        console.warn(`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ${this._eventsCount} ${eventName} listeners added. Use emitter.setMaxListeners() to increase limit`);
       }
       listeners![prepend === true ? 'unshift' : 'push'](newListener);
     } else {
@@ -115,7 +91,7 @@ class EventEmitter {
 
     let index = -1;
     for (let i = 0; i < listeners.length; i += 1) {
-      if (listeners[i] === listener || (listeners[i] as Listener)?.listener === listener) {
+      if (listeners[i] === listener || (listeners[i] as Listener).listener === listener) {
         index = i;
         break;
       }
@@ -153,24 +129,16 @@ class EventEmitter {
   }
 
   listenerCount(eventName: any): number {
-    if (!['string', 'symbol'].includes(typeof eventName)) {
-      return 0;
-    }
-
     return this._events[eventName]?.length ?? 0;
   }
 
   listeners(eventName: any): Function[] {
-    if (!['string', 'symbol'].includes(typeof eventName)) {
-      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
-    }
-
     return (this._events[eventName] ?? [])
       .map((listener) => (listener as Listener).listener ?? listener);
   }
 
   eventNames(): any[] {
-    return [...this._events.keys()];
+    return Object.keys(this._events);
   }
 
   once(eventName: any, listener: Function): EventEmitter {
@@ -190,18 +158,10 @@ class EventEmitter {
   }
 
   prependListener(eventName: any, listener: Function): EventEmitter {
-    if (!['string', 'symbol'].includes(typeof eventName)) {
-      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
-    }
-
     return this._on(eventName, listener, true, false);
   }
 
   rawListeners(eventName: any): (Function | Listener)[] {
-    if (!['string', 'symbol'].includes(typeof eventName)) {
-      throw new TypeError(`The "eventName" argument must be of type String or Symbol. Received type ${typeof eventName}`);
-    }
-
     return [...this._events[eventName] ?? []];
   }
 }

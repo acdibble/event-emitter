@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import EventEmitter from '../src/index';
+import Listener from '../src/Listener';
 
 const noop = () => {};
 
@@ -84,6 +85,22 @@ describe('EventEmitter', () => {
       expect(call1).to.eql(0);
       expect(call2).to.eql(1);
     });
+
+    it('warns with a MaxListenersExceededWarning when too many listeners are added', () => {
+      const emitter = new EventEmitter();
+      emitter.setMaxListeners(1);
+      const { warn } = console;
+      const warnings = [];
+      console.warn = (...args) => {
+        warnings.push(...args);
+        warn.call(console, ...args);
+      };
+      emitter.on('test', noop);
+      emitter.on('test', noop);
+      console.warn = warn;
+      expect(warnings).to.have.lengthOf(1);
+      expect(warnings[0]).to.eql('MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 1 test listeners added. Use emitter.setMaxListeners() to increase limit');
+    });
   });
 
   describe('EventEmitter#addEventListener', () => {
@@ -158,6 +175,55 @@ describe('EventEmitter', () => {
       expect(calls.length).to.eql(1);
       expect(calls[0]).to.eql(['test', noop]);
     });
+
+    it('throws an error if listener is not a function', () => {
+      const emitter = new EventEmitter();
+      try {
+        emitter.removeListener('test');
+      } catch (e) {
+        expect(e.message).to.equal('The "listener" argument must be of type Function. Received type undefined');
+      }
+    });
+
+    it('still returns instance even if listener is not found', () => {
+      const emitter = new EventEmitter();
+      emitter.on('test', noop);
+      expect(emitter._events.test).to.have.lengthOf(1);
+      const out = emitter.removeListener('test', () => {});
+      expect(out).to.eql(emitter);
+      expect(emitter._events.test).to.have.lengthOf(1);
+    });
+
+    it('still returns instance even if listener is not found', () => {
+      const emitter = new EventEmitter();
+      emitter.once('test', noop);
+      expect(emitter._events.test).to.have.lengthOf(1);
+      const out = emitter.removeListener('test', () => {});
+      expect(out).to.eql(emitter);
+      expect(emitter._events.test).to.have.lengthOf(1);
+    });
+
+    it('removes a once listener', () => {
+      const emitter = new EventEmitter();
+      emitter.once('test', noop);
+      expect(emitter._events.test).to.have.lengthOf(1);
+      const out = emitter.removeListener('test', noop);
+      expect(out).to.eql(emitter);
+      expect(emitter._events.test).to.have.lengthOf(0);
+    });
+
+    it('only removes first found instance', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.on('test', () => {});
+      emitter.once('test', noop);
+
+      expect(emitter._events.test).to.have.lengthOf(3);
+      const out = emitter.removeListener('test', noop);
+      expect(out).to.eql(emitter);
+      expect(emitter._events.test).to.have.lengthOf(2);
+    });
   });
 
   describe('EventEmitter#off', () => {
@@ -212,6 +278,15 @@ describe('EventEmitter', () => {
       expect(call3).to.eql(1);
 
       expect(emitter._events.test).to.eql([fn1]);
+    });
+
+    it('throws an error if listener is not a function', () => {
+      const emitter = new EventEmitter();
+      try {
+        emitter.once('test');
+      } catch (e) {
+        expect(e.message).to.equal('The "listener" argument must be of type Function. Received type undefined');
+      }
     });
   });
 
@@ -301,6 +376,12 @@ describe('EventEmitter', () => {
       EventEmitter.defaultMaxListeners = 20;
       expect(emitter.getMaxListeners()).to.eql(20);
     });
+
+    it('returns the max events set for that instance', () => {
+      const emitter = new EventEmitter();
+      emitter.setMaxListeners(5);
+      expect(emitter.getMaxListeners()).to.eql(5);
+    });
   });
 
   describe('EventEmitter#prependListener', () => {
@@ -316,6 +397,115 @@ describe('EventEmitter', () => {
 
       expect(call1).to.eql(1);
       expect(call2).to.eql(0);
+    });
+  });
+
+  describe('EventEmitter#eventNames', () => {
+    it('returns the names of all registered events', () => {
+      const emitter = new EventEmitter();
+      emitter.on('test', noop);
+      emitter.on('another', noop);
+      emitter.on('aThird', noop);
+
+      expect(emitter.eventNames()).to.eql(['test', 'another', 'aThird']);
+    });
+  });
+
+  describe('EventEmitter#rawListeners', () => {
+    it('returns a copy of the array of listeners for the event named eventName, including any wrappers', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.once('test', noop);
+
+      const listeners = emitter.rawListeners('test');
+      expect(listeners[0]).to.eql(noop);
+      expect(listeners[1]).to.be.instanceOf(Listener);
+      expect(listeners[1].listener).to.eql(noop);
+
+      expect(listeners).to.not.equal(emitter._events.test);
+      expect(listeners).to.eql(emitter._events.test);
+    });
+
+    it('returns an empty array if there are no events', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.once('test', noop);
+
+      const listeners = emitter.rawListeners('other');
+      expect(listeners).to.eql([]);
+    });
+  });
+
+  describe('EventEmitter#listeners', () => {
+    it('returns a copy of the array of listeners for the event named eventName', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.once('test', noop);
+
+      const listeners = emitter.listeners('test');
+      expect(listeners[0]).to.eql(noop);
+      expect(listeners[1]).to.eql(noop);
+
+      expect(listeners).to.not.equal(emitter._events.test);
+    });
+
+    it('returns an empty array if there are no events', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.once('test', noop);
+
+      const listeners = emitter.listeners('other');
+      expect(listeners).to.eql([]);
+    });
+  });
+
+  describe('EventEmitter#listenerCount', () => {
+    it('returns the number of listeners listening to the event named eventName.', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.once('test', noop);
+
+      const count = emitter.listenerCount('test');
+      expect(count).to.eql(2);
+    });
+
+    it('returns the number of listeners listening to the event named eventName.', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      emitter.once('test', noop);
+
+      const count = emitter.listenerCount('other');
+      expect(count).to.eql(0);
+    });
+  });
+
+  describe('EventEmitter#prependOnceListener', () => {
+    it('prepends a once listener', () => {
+      const emitter = new EventEmitter();
+
+      emitter.on('test', noop);
+      const fn = () => {};
+      emitter.prependOnceListener('test', fn);
+
+      const listeners = emitter._events.test;
+      expect(listeners[0]).to.be.instanceOf(Listener);
+      expect(listeners[0].listener).to.eql(fn);
+      expect(listeners[1]).to.eql(noop);
+    });
+
+    it('throws an error if listener is not a function', () => {
+      const emitter = new EventEmitter();
+      try {
+        emitter.prependOnceListener('test');
+      } catch (e) {
+        expect(e.message).to.equal('The "listener" argument must be of type Function. Received type undefined');
+      }
     });
   });
 });
