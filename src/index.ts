@@ -4,7 +4,7 @@ interface Events {
   [eventName: string]: (Function | Listener)[];
 }
 
-class EventEmitter {
+export class EventEmitter {
   static defaultMaxListeners = 10;
 
   private _maxListeners: number | undefined;
@@ -166,7 +166,7 @@ class EventEmitter {
   }
 }
 
-interface EventEmitter {
+export interface EventEmitter {
   off: typeof EventEmitter.prototype.removeListener;
   addListener: typeof EventEmitter.prototype.on;
 }
@@ -174,4 +174,13 @@ interface EventEmitter {
 EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
 EventEmitter.prototype.addListener = EventEmitter.prototype.on;
 
-export default EventEmitter;
+export const once = (
+  emitter: EventEmitter,
+  name: any,
+): Promise<any[]> => new Promise((resolve, reject) => {
+  emitter.once(name, (...args: any[]) => {
+    emitter.off('error', reject);
+    resolve(args);
+  });
+  emitter.on('error', reject);
+});

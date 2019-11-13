@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import EventEmitter from '../src/index';
+import { EventEmitter, once } from '../src/index';
 import Listener from '../src/Listener';
 
 const noop = () => {};
@@ -507,5 +507,44 @@ describe('EventEmitter', () => {
         expect(e.message).to.equal('The "listener" argument must be of type Function. Received type undefined');
       }
     });
+  });
+});
+
+describe('once', () => {
+  it('returns a promise', () => {
+    const emitter = new EventEmitter();
+    expect(once(emitter)).to.be.instanceOf(Promise);
+  });
+
+  it('adds the event to be listened to once', () => {
+    const emitter = new EventEmitter();
+    once(emitter, 'test');
+    expect(emitter.listeners('test')).to.have.lengthOf(1);
+    expect(emitter.rawListeners('test')[0]).to.be.instanceOf(Listener);
+  });
+
+  it('adds an error event to be listened to', () => {
+    const emitter = new EventEmitter();
+    once(emitter, 'test');
+    expect(emitter.listeners('error')).to.have.lengthOf(1);
+  });
+
+  it('resolves when the event is emitted', async () => {
+    const emitter = new EventEmitter();
+    const promise = once(emitter, 'test');
+    emitter.emit('test', 42);
+    const args = await promise;
+    expect(args).to.eql([42]);
+  });
+
+  it('rejects if any errors are emitted', () => {
+    const emitter = new EventEmitter();
+    try {
+      once(emitter, 'test');
+      emitter.emit('error', Error('test err'));
+    } catch (e) {
+      expect(e).to.be.instanceOf(Error);
+      expect(e.message).to.eql('test err');
+    }
   });
 });
