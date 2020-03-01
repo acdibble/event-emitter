@@ -2,14 +2,9 @@ import { expect } from 'chai';
 import { EventEmitter, once } from '../src/index';
 import Listener from '../src/Listener';
 
-const noop = () => {};
+const noop = () => { };
 
 describe('EventEmitter', () => {
-  let _events = null;
-  before(() => {
-    [_events] = Object.getOwnPropertySymbols(new EventEmitter());
-  });
-
   describe('constructor', () => {
     it('is a constructor', () => {
       expect(new EventEmitter()).to.be.instanceOf(EventEmitter);
@@ -36,7 +31,7 @@ describe('EventEmitter', () => {
       const emitter = new EventEmitter();
       emitter.on('test', noop);
 
-      const events = emitter[_events].test;
+      const events = emitter.events.test;
       expect(events).to.eql([noop]);
     });
 
@@ -45,7 +40,7 @@ describe('EventEmitter', () => {
       emitter.on('test', noop);
       emitter.on('test', noop);
 
-      const events = emitter[_events].test;
+      const events = emitter.events.test;
       expect(events).to.eql([noop, noop]);
     });
 
@@ -55,10 +50,10 @@ describe('EventEmitter', () => {
       emitter.on('test', noop);
       emitter.on('test2', noop);
 
-      const events1 = emitter[_events].test;
+      const events1 = emitter.events.test;
       expect(events1).to.eql([noop, noop]);
 
-      const events2 = emitter[_events].test2;
+      const events2 = emitter.events.test2;
       expect(events2).to.eql([noop]);
     });
 
@@ -78,7 +73,7 @@ describe('EventEmitter', () => {
       let i = 0;
       let call1 = null;
       emitter.on('newListener', () => { call1 = i++; });
-      const events = emitter[_events].test;
+      const events = emitter.events.test;
       const oldPush = events.push;
       let call2 = null;
       events.push = (...args) => {
@@ -167,7 +162,7 @@ describe('EventEmitter', () => {
       emitter.on('test', noop);
       emitter.removeListener('test', noop);
 
-      const events = emitter[_events].test;
+      const events = emitter.events.test;
       expect(events).to.eql([]);
     });
 
@@ -193,41 +188,41 @@ describe('EventEmitter', () => {
     it('still returns instance even if listener is not found', () => {
       const emitter = new EventEmitter();
       emitter.on('test', noop);
-      expect(emitter[_events].test).to.have.lengthOf(1);
-      const out = emitter.removeListener('test', () => {});
+      expect(emitter.events.test).to.have.lengthOf(1);
+      const out = emitter.removeListener('test', () => { });
       expect(out).to.eql(emitter);
-      expect(emitter[_events].test).to.have.lengthOf(1);
+      expect(emitter.events.test).to.have.lengthOf(1);
     });
 
     it('still returns instance even if listener is not found', () => {
       const emitter = new EventEmitter();
       emitter.once('test', noop);
-      expect(emitter[_events].test).to.have.lengthOf(1);
-      const out = emitter.removeListener('test', () => {});
+      expect(emitter.events.test).to.have.lengthOf(1);
+      const out = emitter.removeListener('test', () => { });
       expect(out).to.eql(emitter);
-      expect(emitter[_events].test).to.have.lengthOf(1);
+      expect(emitter.events.test).to.have.lengthOf(1);
     });
 
     it('removes a once listener', () => {
       const emitter = new EventEmitter();
       emitter.once('test', noop);
-      expect(emitter[_events].test).to.have.lengthOf(1);
+      expect(emitter.events.test).to.have.lengthOf(1);
       const out = emitter.removeListener('test', noop);
       expect(out).to.eql(emitter);
-      expect(emitter[_events].test).to.have.lengthOf(0);
+      expect(emitter.events.test).to.have.lengthOf(0);
     });
 
     it('only removes first found instance', () => {
       const emitter = new EventEmitter();
 
       emitter.on('test', noop);
-      emitter.on('test', () => {});
+      emitter.on('test', () => { });
       emitter.once('test', noop);
 
-      expect(emitter[_events].test).to.have.lengthOf(3);
+      expect(emitter.events.test).to.have.lengthOf(3);
       const out = emitter.removeListener('test', noop);
       expect(out).to.eql(emitter);
-      expect(emitter[_events].test).to.have.lengthOf(2);
+      expect(emitter.events.test).to.have.lengthOf(2);
     });
   });
 
@@ -240,12 +235,17 @@ describe('EventEmitter', () => {
   describe('EventEmitter#once', () => {
     it('properly invokes once listeners', () => {
       let called1 = false;
-      const fn1 = () => { called1 = true; };
+      let calledWith;
+      const fn1 = (...args) => {
+        called1 = true;
+        calledWith = args;
+      };
 
       const emitter = new EventEmitter();
       emitter.once('test', fn1);
-      emitter.emit('test');
+      emitter.emit('test', 'a', 0x0b, Symbol.for('test'));
       expect(called1).to.eql(true);
+      expect(calledWith).to.eql(['a', 0x0b, Symbol.for('test')]);
     });
 
     it('properly invokes once listeners and removes them', () => {
@@ -261,7 +261,7 @@ describe('EventEmitter', () => {
       expect(called1).to.eql(true);
       expect(called2).to.eql(true);
 
-      expect(emitter[_events].test).to.eql([fn1]);
+      expect(emitter.events.test).to.eql([fn1]);
     });
 
     it('properly invokes once listeners and removes them calling "removeListener"', () => {
@@ -282,7 +282,7 @@ describe('EventEmitter', () => {
       expect(call2).to.eql(2);
       expect(call3).to.eql(1);
 
-      expect(emitter[_events].test).to.eql([fn1]);
+      expect(emitter.events.test).to.eql([fn1]);
     });
 
     it('throws an error if listener is not a function', () => {
@@ -308,7 +308,7 @@ describe('EventEmitter', () => {
       emitter.on('aThird', noop);
 
       emitter.removeAllListeners();
-      expect(Object.keys(emitter[_events]).length).to.eql(0);
+      expect(Object.keys(emitter.events).length).to.eql(0);
     });
 
     it('removes all listeners for a certain event', () => {
@@ -318,10 +318,10 @@ describe('EventEmitter', () => {
       emitter.on('aThird', noop);
 
       emitter.removeAllListeners('test');
-      expect(Object.keys(emitter[_events]).length).to.eql(2);
+      expect(Object.keys(emitter.events).length).to.eql(2);
 
-      expect(emitter[_events].another).to.eql([noop]);
-      expect(emitter[_events].aThird).to.eql([noop]);
+      expect(emitter.events.another).to.eql([noop]);
+      expect(emitter.events.aThird).to.eql([noop]);
     });
   });
 
@@ -329,8 +329,7 @@ describe('EventEmitter', () => {
     it('sets the max listeners to a non-negative number', () => {
       const emitter = new EventEmitter();
       emitter.setMaxListeners(15);
-      const [,, maxListeners] = Object.getOwnPropertySymbols(emitter);
-      expect(emitter[maxListeners]).to.eql(15);
+      expect(emitter.maxListeners).to.eql(15);
     });
 
     it('rejects non-numbers', () => {
@@ -429,8 +428,8 @@ describe('EventEmitter', () => {
       expect(listeners[1]).to.be.instanceOf(Listener);
       expect(listeners[1].listener).to.eql(noop);
 
-      expect(listeners).to.not.equal(emitter[_events].test);
-      expect(listeners).to.eql(emitter[_events].test);
+      expect(listeners).to.not.equal(emitter.events.test);
+      expect(listeners).to.eql(emitter.events.test);
     });
 
     it('returns an empty array if there are no events', () => {
@@ -455,7 +454,7 @@ describe('EventEmitter', () => {
       expect(listeners[0]).to.eql(noop);
       expect(listeners[1]).to.eql(noop);
 
-      expect(listeners).to.not.equal(emitter[_events].test);
+      expect(listeners).to.not.equal(emitter.events.test);
     });
 
     it('returns an empty array if there are no events', () => {
@@ -496,10 +495,10 @@ describe('EventEmitter', () => {
       const emitter = new EventEmitter();
 
       emitter.on('test', noop);
-      const fn = () => {};
+      const fn = () => { };
       emitter.prependOnceListener('test', fn);
 
-      const listeners = emitter[_events].test;
+      const listeners = emitter.events.test;
       expect(listeners[0]).to.be.instanceOf(Listener);
       expect(listeners[0].listener).to.eql(fn);
       expect(listeners[1]).to.eql(noop);

@@ -8,8 +8,8 @@ class Listener {
     this.listener = fn;
   }
 
-  call(ctx: any, ...args: any[]) {
-    return this.listener.call(ctx, ...args);
+  apply(ctx: any, args: any[]) {
+    return this.listener.apply(ctx, args);
   }
 }
 
